@@ -84,8 +84,6 @@ app.get("/", (req, res) => {
 });
 
 app.get("/login", passport.authenticate("azuread-openidconnect", { failureRedirect: "/" }));
-//log aggiunti
-  console.log("Siamo qui");
 });
 app.post("/auth/callback",
   passport.authenticate("azuread-openidconnect", { failureRedirect: "/" }),
