@@ -35,7 +35,6 @@ passport.use(new OIDCStrategy(
     // salviamo accessToken dentro profile per usarlo
     profile.accessToken = accessToken;
     profile.refreshToken = refreshToken;
-    console.log("Access Token:", req.user.accessToken);
     return done(null, profile);
   }
 ));
@@ -84,7 +83,7 @@ app.get("/", (req, res) => {
 });
 
 app.get("/login", passport.authenticate("azuread-openidconnect", { failureRedirect: "/" }));
-});
+
 app.post("/auth/callback",
   passport.authenticate("azuread-openidconnect", { failureRedirect: "/" }),
   (req, res) => res.redirect("/")
@@ -193,4 +192,4 @@ app.post("/events/:id/comments", ensureAuth, async (req, res) => {
 });
 
 const port = process.env.PORT || 3000;
-app.listen(port, () => console.log(`Server avviato su questa porta ${port}`));
+app.listen(port, () => console.log(`Server avviato su porta ${port}`));
