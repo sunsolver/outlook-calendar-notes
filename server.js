@@ -84,7 +84,9 @@ app.get("/", (req, res) => {
 });
 
 app.get("/login", passport.authenticate("azuread-openidconnect", { failureRedirect: "/" }));
-
+//log aggiunti
+  console.log("Siamo qui");
+});
 app.post("/auth/callback",
   passport.authenticate("azuread-openidconnect", { failureRedirect: "/" }),
   (req, res) => res.redirect("/")
@@ -96,11 +98,6 @@ app.get("/logout", (req, res) => {
 });
 
 // Mostra eventi + commenti (semplice HTML server-side)
-// Aggiunta verifica creazione log
-app.get("/test-log", (req, res) => {
-  console.log("📢 Richiesta ricevuta su /test-log alle", new Date().toISOString());
-  res.send("Controlla i Logs su Render: dovresti vedere un messaggio con data/ora.");
-});
 app.get("/events", ensureAuth, async (req, res) => {
   const client = Client.init({
     authProvider: (done) => done(null, req.user.accessToken)
