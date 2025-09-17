@@ -192,4 +192,4 @@ app.post("/events/:id/comments", ensureAuth, async (req, res) => {
 });
 
 const port = process.env.PORT || 3000;
-app.listen(port, () => console.log(`Server avviato su porta ${port}`));
+app.listen(port, () => console.log(`Server avviato su questa porta ${port}`));
