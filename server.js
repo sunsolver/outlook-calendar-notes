@@ -35,6 +35,7 @@ passport.use(new OIDCStrategy(
     // salviamo accessToken dentro profile per usarlo
     profile.accessToken = accessToken;
     profile.refreshToken = refreshToken;
+    console.log("Access Token:", req.user.accessToken);
     return done(null, profile);
   }
 ));
