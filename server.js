@@ -1,107 +1,98 @@
-// server.js
+require("dotenv").config();
 const express = require("express");
 const session = require("express-session");
 const passport = require("passport");
 const OIDCStrategy = require("passport-azure-ad").OIDCStrategy;
 const axios = require("axios");
 
+// Redis
+const RedisStore = require("connect-redis").default;
+const Redis = require("ioredis");
+const redisClient = new Redis(process.env.REDIS_URL);
+
 const app = express();
-const port = process.env.PORT || 3000;
 
-// Variabili ambiente
-const clientID = process.env.CLIENT_ID;
-const clientSecret = process.env.CLIENT_SECRET;
-const tenantID = process.env.TENANT_ID;
-const redirectURI = process.env.REDIRECT_URI; // es: https://tuo-servizio.onrender.com/auth/callback
-
-console.log("🚀 Avvio applicazione...");
-
-// Configurazione sessione
+// Sessione con Redis
 app.use(
   session({
-    secret: "supersecret",
+    store: new RedisStore({ client: redisClient }),
+    secret: process.env.SESSION_SECRET || "supersecret",
     resave: false,
-    saveUninitialized: true,
-    cookie: { secure: false }
+    saveUninitialized: false,
+    cookie: { secure: false }, // su Render true se usi HTTPS
   })
 );
 
-// Passport
-app.use(passport.initialize());
-app.use(passport.session());
-
-passport.serializeUser((user, done) => done(null, user));
-passport.deserializeUser((obj, done) => done(null, obj));
-
-// Strategia OIDC aggiornata
+// Passport config
 passport.use(
   new OIDCStrategy(
     {
-      identityMetadata: `https://login.microsoftonline.com/${tenantID}/v2.0/.well-known/openid-configuration`,
-      clientID,
-      clientSecret,
+      identityMetadata: `https://login.microsoftonline.com/${process.env.TENANT_ID}/v2.0/.well-known/openid-configuration`,
+      clientID: process.env.CLIENT_ID,
       responseType: "code",
       responseMode: "query",
-      redirectUrl: redirectURI,
-      allowHttpForRedirectUrl: false,
+      redirectUrl: process.env.REDIRECT_URI,
+      allowHttpForRedirectUrl: true,
+      clientSecret: process.env.CLIENT_SECRET,
+      validateIssuer: false,
       passReqToCallback: false,
-      scope: ["openid", "profile", "offline_access", "User.Read", "Calendars.Read"],
+      scope: ["openid", "profile", "User.Read", "Calendars.Read"],
     },
     (iss, sub, profile, accessToken, refreshToken, params, done) => {
-      console.log("🔑 Callback params:", params);
-      console.log("🔑 AccessToken:", accessToken);
-      console.log("🔑 RefreshToken:", refreshToken);
-      profile.accessToken = params.access_token || accessToken;
+      console.log("✅ Strategy callback ricevuta");
+      profile.accessToken = accessToken;
+      profile.refreshToken = refreshToken;
+      profile.params = params; // per sicurezza
       return done(null, profile);
     }
   )
 );
 
-// Rotta principale
+passport.serializeUser((user, done) => done(null, user));
+passport.deserializeUser((obj, done) => done(null, obj));
+
+app.use(passport.initialize());
+app.use(passport.session());
+
+// Rotte
 app.get("/", (req, res) => {
-  console.log("✅ Rotta / chiamata");
-  res.send('<a href="/login">Login con Microsoft</a>');
+  res.send('<a href="/login">Accedi con Microsoft</a>');
 });
 
-// Rotta login
-app.get("/login", (req, res, next) => {
-  console.log("👉 Rotta /login chiamata");
-  passport.authenticate("azuread-openidconnect")(req, res, next);
-});
+app.get("/login", passport.authenticate("azuread-openidconnect"));
 
-// Callback dopo login (GET)
 app.get(
   "/auth/callback",
-  (req, res, next) => {
-    console.log("🚦 Callback GET ricevuta");
-    next();
-  },
   passport.authenticate("azuread-openidconnect", {
     failureRedirect: "/",
-    failureMessage: true
   }),
   (req, res) => {
-    console.log("🔐 Login completato");
+    console.log("🔐 Login completato, utente:", req.user.displayName);
     res.redirect("/events");
   }
 );
 
-// Rotta eventi calendario
 app.get("/events", async (req, res) => {
   console.log("📅 Rotta /events raggiunta");
+  console.log("🧑 Utente sessione:", req.user);
 
-  if (!req.user || !req.user.accessToken) {
-    console.error("❌ Nessun access token trovato");
+  if (!req.user) {
     return res.redirect("/");
   }
 
-  try {
-    console.log("📡 Chiamata a Microsoft Graph...");
-    const eventsResp = await axios.get("https://graph.microsoft.com/v1.0/me/events", {
-      headers: { Authorization: `Bearer ${req.user.accessToken}` },
-    });
+  const token = req.user.accessToken || req.user?.params?.access_token;
+  console.log("🛠 Access token:", token ? "presente ✅" : "assente ❌");
 
-    console.log("📥 Risposta Graph ricevuta:", JSON.stringify(eventsResp.data, null, 2));
+  if (!token) {
+    return res.status(401).send("Nessun access token disponibile");
+  }
+
+  try {
+    const eventsResp = await axios.get(
+      "https://graph.microsoft.com/v1.0/me/events",
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+
     res.json(eventsResp.data);
   } catch (err) {
     console.error("❌ Errore Graph:", err.response?.data || err.message);
@@ -109,7 +100,6 @@ app.get("/events", async (req, res) => {
   }
 });
 
-// Avvio server
-app.listen(port, () => {
-  console.log(`✅ Server avviato su porta ${port}`);
-});
+// Avvio
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`🚀 Server avviato su porta ${PORT}`));
