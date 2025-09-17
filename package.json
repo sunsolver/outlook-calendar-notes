@@ -1,17 +1,16 @@
 {
-  "name": "outlook-calendar-notes",
+  "name": "outlook-calendar-app",
   "version": "1.0.0",
+  "description": "App Node.js per mostrare eventi da Microsoft 365 Calendar con login OAuth2",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
   },
   "dependencies": {
-    "@microsoft/microsoft-graph-client": "^3.0.0",
+    "axios": "^1.7.0",
     "express": "^4.18.2",
     "express-session": "^1.17.3",
-    "isomorphic-fetch": "^3.0.0",
     "passport": "^0.7.0",
-    "passport-azure-ad": "^4.3.5",
-    "pg": "^8.11.0"
+    "passport-azure-ad": "^4.3.5"
   }
 }
