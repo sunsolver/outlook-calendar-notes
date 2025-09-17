@@ -16,12 +16,13 @@ const redirectURI = process.env.REDIRECT_URI; // es: https://tuo-progetto.onrend
 
 console.log("🚀 Avvio applicazione...");
 
-// Sessione
+// Configurazione sessione
 app.use(
   session({
     secret: "supersecret",
     resave: false,
     saveUninitialized: true,
+    cookie: { secure: false } // necessario se Render gestisce HTTPS automaticamente
   })
 );
 
@@ -32,14 +33,15 @@ app.use(passport.session());
 passport.serializeUser((user, done) => done(null, user));
 passport.deserializeUser((obj, done) => done(null, obj));
 
+// Strategia OIDC
 passport.use(
   new OIDCStrategy(
     {
       identityMetadata: `https://login.microsoftonline.com/${tenantID}/v2.0/.well-known/openid-configuration`,
       clientID,
       clientSecret,
-      responseType: "code",
-      responseMode: "query",
+      responseType: "code id_token",
+      responseMode: "form_post",
       redirectUrl: redirectURI,
       allowHttpForRedirectUrl: false,
       passReqToCallback: false,
@@ -47,7 +49,7 @@ passport.use(
     },
     (iss, sub, profile, accessToken, refreshToken, params, done) => {
       console.log("🔑 Access token ricevuto");
-      profile.accessToken = accessToken;
+      profile.accessToken = params.access_token || accessToken;
       return done(null, profile);
     }
   )
@@ -65,11 +67,16 @@ app.get("/login", (req, res, next) => {
   passport.authenticate("azuread-openidconnect")(req, res, next);
 });
 
-// Callback dopo login
-app.get(
+// Callback dopo login (POST)
+app.post(
   "/auth/callback",
+  (req, res, next) => {
+    console.log("🚦 Callback POST ricevuta");
+    next();
+  },
   passport.authenticate("azuread-openidconnect", {
     failureRedirect: "/",
+    failureMessage: true
   }),
   (req, res) => {
     console.log("🔐 Login completato");
