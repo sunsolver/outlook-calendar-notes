@@ -8,11 +8,11 @@ const axios = require("axios");
 const app = express();
 const port = process.env.PORT || 3000;
 
-// Variabili ambiente (Render → Settings → Environment)
+// Variabili ambiente
 const clientID = process.env.CLIENT_ID;
 const clientSecret = process.env.CLIENT_SECRET;
 const tenantID = process.env.TENANT_ID;
-const redirectURI = process.env.REDIRECT_URI; // es: https://tuo-progetto.onrender.com/auth/callback
+const redirectURI = process.env.REDIRECT_URI; // es: https://tuo-servizio.onrender.com/auth/callback
 
 console.log("🚀 Avvio applicazione...");
 
@@ -22,7 +22,7 @@ app.use(
     secret: "supersecret",
     resave: false,
     saveUninitialized: true,
-    cookie: { secure: false } // necessario se Render gestisce HTTPS automaticamente
+    cookie: { secure: false }
   })
 );
 
@@ -33,22 +33,24 @@ app.use(passport.session());
 passport.serializeUser((user, done) => done(null, user));
 passport.deserializeUser((obj, done) => done(null, obj));
 
-// Strategia OIDC
+// Strategia OIDC aggiornata
 passport.use(
   new OIDCStrategy(
     {
       identityMetadata: `https://login.microsoftonline.com/${tenantID}/v2.0/.well-known/openid-configuration`,
       clientID,
       clientSecret,
-      responseType: "code id_token",
-      responseMode: "form_post",
+      responseType: "code",
+      responseMode: "query",
       redirectUrl: redirectURI,
       allowHttpForRedirectUrl: false,
       passReqToCallback: false,
       scope: ["openid", "profile", "offline_access", "User.Read", "Calendars.Read"],
     },
     (iss, sub, profile, accessToken, refreshToken, params, done) => {
-      console.log("🔑 Access token ricevuto");
+      console.log("🔑 Callback params:", params);
+      console.log("🔑 AccessToken:", accessToken);
+      console.log("🔑 RefreshToken:", refreshToken);
       profile.accessToken = params.access_token || accessToken;
       return done(null, profile);
     }
@@ -61,17 +63,17 @@ app.get("/", (req, res) => {
   res.send('<a href="/login">Login con Microsoft</a>');
 });
 
-// Rotta login con log
+// Rotta login
 app.get("/login", (req, res, next) => {
   console.log("👉 Rotta /login chiamata");
   passport.authenticate("azuread-openidconnect")(req, res, next);
 });
 
-// Callback dopo login (POST)
-app.post(
+// Callback dopo login (GET)
+app.get(
   "/auth/callback",
   (req, res, next) => {
-    console.log("🚦 Callback POST ricevuta");
+    console.log("🚦 Callback GET ricevuta");
     next();
   },
   passport.authenticate("azuread-openidconnect", {
