@@ -8,16 +8,15 @@ const axios = require("axios");
 const app = express();
 const port = process.env.PORT || 3000;
 
-// 🔑 Variabili ambiente (Render → Settings → Environment)
+// Variabili ambiente (Render → Settings → Environment)
 const clientID = process.env.CLIENT_ID;
 const clientSecret = process.env.CLIENT_SECRET;
 const tenantID = process.env.TENANT_ID;
 const redirectURI = process.env.REDIRECT_URI; // es: https://tuo-progetto.onrender.com/auth/callback
 
-// 🚀 Avvio app
 console.log("🚀 Avvio applicazione...");
 
-// Configurazione sessione
+// Sessione
 app.use(
   session({
     secret: "supersecret",
@@ -26,7 +25,7 @@ app.use(
   })
 );
 
-// Configurazione Passport
+// Passport
 app.use(passport.initialize());
 app.use(passport.session());
 
@@ -60,8 +59,11 @@ app.get("/", (req, res) => {
   res.send('<a href="/login">Login con Microsoft</a>');
 });
 
-// Rotta login
-app.get("/login", passport.authenticate("azuread-openidconnect"));
+// Rotta login con log
+app.get("/login", (req, res, next) => {
+  console.log("👉 Rotta /login chiamata");
+  passport.authenticate("azuread-openidconnect")(req, res, next);
+});
 
 // Callback dopo login
 app.get(
@@ -91,7 +93,6 @@ app.get("/events", async (req, res) => {
     });
 
     console.log("📥 Risposta Graph ricevuta:", JSON.stringify(eventsResp.data, null, 2));
-
     res.json(eventsResp.data);
   } catch (err) {
     console.error("❌ Errore Graph:", err.response?.data || err.message);
