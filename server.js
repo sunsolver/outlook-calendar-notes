@@ -101,29 +101,23 @@ app.get("/auth/callback", (req, res) => {
 
 // EVENTI CALENDARIO
 app.get("/events", async (req, res) => {
-  console.log("📅 Rotta /events chiamata");
-  if (!req.session.accessToken) {
-    console.log("⚠️ Nessun access token in sessione");
-    return res.redirect("/login");
-  }
+  if (!req.session.accessToken) return res.redirect("/login");
 
-  try {
-    console.log("🔄 Chiamata a Microsoft Graph con token...");
-    const graphResponse = await fetch("https://graph.microsoft.com/v1.0/me/events", {
-      headers: { Authorization: `Bearer ${req.session.accessToken}` },
-    });
+  const graphResponse = await fetch("https://graph.microsoft.com/v1.0/me/events", {
+    headers: { Authorization: `Bearer ${req.session.accessToken}` },
+  });
 
-    console.log("🌐 Graph status:", graphResponse.status);
-    const data = await graphResponse.json();
-    console.log("📊 Risposta Graph (prime 500 chars):", JSON.stringify(data).substring(0, 500));
+  const data = await graphResponse.json();
 
-    res.json(data);
-  } catch (err) {
-    console.error("❌ Errore chiamata Graph:", err);
-    res.status(500).send("Errore recupero eventi");
-  }
+  // Genera HTML con elenco eventi
+  let html = "<h1>Eventi calendario</h1><ul>";
+  data.value.forEach(event => {
+    html += `<li><strong>${event.subject}</strong> - ${event.start.dateTime} → ${event.end.dateTime}</li>`;
+  });
+  html += "</ul><a href='/'>🔙 Torna indietro</a>";
+
+  res.send(html);
 });
-
 // LOGOUT
 app.get("/logout", (req, res) => {
   console.log("🚪 Logout chiamato");
