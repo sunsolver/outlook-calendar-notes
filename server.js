@@ -1,105 +1,140 @@
 require("dotenv").config();
 const express = require("express");
 const session = require("express-session");
-const passport = require("passport");
-const OIDCStrategy = require("passport-azure-ad").OIDCStrategy;
-const axios = require("axios");
-
-// Redis
-const RedisStore = require("connect-redis").default;
-const Redis = require("ioredis");
-const redisClient = new Redis(process.env.REDIS_URL);
+const msal = require("@azure/msal-node");
+const fetch = require("node-fetch");
 
 const app = express();
+const PORT = process.env.PORT || 3000;
 
-// Sessione con Redis
+// =======================
+// SESSIONE
+// =======================
 app.use(
   session({
-    store: new RedisStore({ client: redisClient }),
     secret: process.env.SESSION_SECRET || "supersecret",
     resave: false,
     saveUninitialized: false,
-    cookie: { secure: false }, // su Render true se usi HTTPS
+    cookie: { secure: false },
   })
 );
 
-// Passport config
-passport.use(
-  new OIDCStrategy(
-    {
-      identityMetadata: `https://login.microsoftonline.com/${process.env.TENANT_ID}/v2.0/.well-known/openid-configuration`,
-      clientID: process.env.CLIENT_ID,
-      responseType: "code",
-      responseMode: "query",
-      redirectUrl: process.env.REDIRECT_URI,
-      allowHttpForRedirectUrl: true,
-      clientSecret: process.env.CLIENT_SECRET,
-      validateIssuer: false,
-      passReqToCallback: false,
-      scope: ["openid", "profile", "User.Read", "Calendars.Read"],
-    },
-    (iss, sub, profile, accessToken, refreshToken, params, done) => {
-      console.log("✅ Strategy callback ricevuta");
-      profile.accessToken = accessToken;
-      profile.refreshToken = refreshToken;
-      profile.params = params; // per sicurezza
-      return done(null, profile);
-    }
-  )
-);
+// =======================
+// MSAL CONFIG
+// =======================
+const msalConfig = {
+  auth: {
+    clientId: process.env.CLIENT_ID,
+    authority: `https://login.microsoftonline.com/${process.env.TENANT_ID}`,
+    clientSecret: process.env.CLIENT_SECRET,
+  },
+};
+const REDIRECT_URI = process.env.REDIRECT_URI || "http://localhost:3000/callback";
+const msalClient = new msal.ConfidentialClientApplication(msalConfig);
 
-passport.serializeUser((user, done) => done(null, user));
-passport.deserializeUser((obj, done) => done(null, obj));
-
-app.use(passport.initialize());
-app.use(passport.session());
-
-// Rotte
-app.get("/", (req, res) => {
-  res.send('<a href="/login">Accedi con Microsoft</a>');
+// =======================
+// DIAGNOSTICA MIDDLEWARE
+// =======================
+app.use((req, res, next) => {
+  console.log(`➡️  [${new Date().toISOString()}] ${req.method} ${req.url}`);
+  console.log("   Session:", req.session);
+  next();
 });
 
-app.get("/login", passport.authenticate("azuread-openidconnect"));
+// =======================
+// ROTTE
+// =======================
 
-app.get(
-  "/auth/callback",
-  passport.authenticate("azuread-openidconnect", {
-    failureRedirect: "/",
-  }),
-  (req, res) => {
-    console.log("🔐 Login completato, utente:", req.user.displayName);
-    res.redirect("/events");
+app.get("/", (req, res) => {
+  console.log("✅ Rotta / chiamata");
+  if (!req.session.account) {
+    return res.send('<a href="/login">Accedi con Microsoft</a>');
   }
-);
+  res.send(`
+    <h1>Sei loggato come: ${req.session.account.username}</h1>
+    <a href="/events">📅 Vedi eventi calendario</a><br/>
+    <a href="/logout">🚪 Logout</a>
+  `);
+});
 
+// LOGIN
+app.get("/login", (req, res) => {
+  console.log("👉 Rotta /login chiamata");
+  const authCodeUrlParameters = {
+    scopes: ["openid", "profile", "User.Read", "Calendars.Read"],
+    redirectUri: REDIRECT_URI,
+  };
+
+  msalClient.getAuthCodeUrl(authCodeUrlParameters).then((url) => {
+    console.log("🔗 Redirect verso Microsoft login:", url);
+    res.redirect(url);
+  }).catch((error) => {
+    console.error("❌ Errore in getAuthCodeUrl:", error);
+    res.status(500).send("Errore login");
+  });
+});
+
+// CALLBACK
+app.get("/callback", (req, res) => {
+  console.log("🚦 Callback GET ricevuta");
+  const tokenRequest = {
+    code: req.query.code,
+    scopes: ["openid", "profile", "User.Read", "Calendars.Read"],
+    redirectUri: REDIRECT_URI,
+  };
+
+  console.log("📩 Codice ricevuto:", req.query.code ? "✅ presente" : "❌ mancante");
+
+  msalClient.acquireTokenByCode(tokenRequest).then((response) => {
+    console.log("🎟️ Token acquisito con successo");
+    console.log("🧑 Account:", response.account);
+    console.log("🔑 AccessToken (inizio):", response.accessToken.substring(0, 40) + "...");
+
+    req.session.account = response.account;
+    req.session.accessToken = response.accessToken;
+    res.redirect("/");
+  }).catch((error) => {
+    console.error("❌ Errore acquireTokenByCode:", error);
+    res.status(500).send("Errore callback");
+  });
+});
+
+// EVENTI CALENDARIO
 app.get("/events", async (req, res) => {
-  console.log("📅 Rotta /events raggiunta");
-  console.log("🧑 Utente sessione:", req.user);
-
-  if (!req.user) {
-    return res.redirect("/");
-  }
-
-  const token = req.user.accessToken || req.user?.params?.access_token;
-  console.log("🛠 Access token:", token ? "presente ✅" : "assente ❌");
-
-  if (!token) {
-    return res.status(401).send("Nessun access token disponibile");
+  console.log("📅 Rotta /events chiamata");
+  if (!req.session.accessToken) {
+    console.log("⚠️ Nessun access token in sessione");
+    return res.redirect("/login");
   }
 
   try {
-    const eventsResp = await axios.get(
-      "https://graph.microsoft.com/v1.0/me/events",
-      { headers: { Authorization: `Bearer ${token}` } }
-    );
+    console.log("🔄 Chiamata a Microsoft Graph con token...");
+    const graphResponse = await fetch("https://graph.microsoft.com/v1.0/me/events", {
+      headers: { Authorization: `Bearer ${req.session.accessToken}` },
+    });
 
-    res.json(eventsResp.data);
+    console.log("🌐 Graph status:", graphResponse.status);
+    const data = await graphResponse.json();
+    console.log("📊 Risposta Graph (prime 500 chars):", JSON.stringify(data).substring(0, 500));
+
+    res.json(data);
   } catch (err) {
-    console.error("❌ Errore Graph:", err.response?.data || err.message);
+    console.error("❌ Errore chiamata Graph:", err);
     res.status(500).send("Errore recupero eventi");
   }
 });
 
-// Avvio
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`🚀 Server avviato su porta ${PORT}`));
+// LOGOUT
+app.get("/logout", (req, res) => {
+  console.log("🚪 Logout chiamato");
+  req.session.destroy(() => {
+    res.redirect("/");
+  });
+});
+
+// =======================
+// START SERVER
+// =======================
+app.listen(PORT, () => {
+  console.log(`🚀 Server in ascolto su http://localhost:${PORT}`);
+});
