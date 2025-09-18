@@ -1,19 +1,15 @@
 {
   "name": "outlook-calendar-app",
   "version": "1.0.0",
-  "description": "App Node.js per mostrare eventi Outlook con Microsoft Graph",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
   },
   "dependencies": {
-    "axios": "^1.7.4",
-    "connect-redis": "^7.0.0",
-    "dotenv": "^16.4.5",
-    "express": "^4.19.2",
+    "@azure/msal-node": "^2.9.0",
+    "dotenv": "^16.0.3",
+    "express": "^4.18.2",
     "express-session": "^1.17.3",
-    "ioredis": "^5.4.1",
-    "passport": "^0.7.0",
-    "passport-azure-ad": "^4.3.5"
+    "node-fetch": "^2.6.7"
   }
 }
