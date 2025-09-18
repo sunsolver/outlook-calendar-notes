@@ -103,20 +103,41 @@ app.get("/auth/callback", (req, res) => {
 app.get("/events", async (req, res) => {
   if (!req.session.accessToken) return res.redirect("/login");
 
-  const graphResponse = await fetch("https://graph.microsoft.com/v1.0/me/events", {
-    headers: { Authorization: `Bearer ${req.session.accessToken}` },
-  });
+  try {
+    const graphResponse = await fetch("https://graph.microsoft.com/v1.0/me/events", {
+      headers: { Authorization: `Bearer ${req.session.accessToken}` },
+    });
+    const data = await graphResponse.json();
 
-  const data = await graphResponse.json();
+    let html = "<h1>Eventi calendario</h1><ul style='list-style-type:circle;'>";
 
-  // Genera HTML con elenco eventi
-  let html = "<h1>Eventi calendario</h1><ul>";
-  data.value.forEach(event => {
-    html += `<li><strong>${event.subject}</strong> - ${event.start.dateTime} → ${event.end.dateTime}</li>`;
-  });
-  html += "</ul><a href='/'>🔙 Torna indietro</a>";
+    data.value.forEach(event => {
+      const start = new Date(event.start.dateTime);
+      const end = new Date(event.end.dateTime);
 
-  res.send(html);
+      const startDate = start.toLocaleDateString("it-IT");
+      const startTime = start.toLocaleTimeString("it-IT", { hour: '2-digit', minute: '2-digit' });
+      const endDate = end.toLocaleDateString("it-IT");
+      const endTime = end.toLocaleTimeString("it-IT", { hour: '2-digit', minute: '2-digit' });
+
+      // Se inizio e fine sono lo stesso giorno, mostro la data solo una volta
+      const dateDisplay = startDate === endDate ? startDate : `${startDate} → ${endDate}`;
+
+      html += `<li>
+        <strong>${event.subject}</strong><br/>
+        📅 ${dateDisplay} 🕒 ${startTime} → ${endTime}<br/>
+        📝 Note/Commenti: <em>${event.bodyPreview || "nessuna nota"}</em>
+      </li>`;
+    });
+
+    html += "</ul><a href='/'>🔙 Torna indietro</a>";
+
+    res.send(html);
+
+  } catch (err) {
+    console.error("❌ Errore recupero eventi:", err);
+    res.status(500).send("Errore recupero eventi");
+  }
 });
 // LOGOUT
 app.get("/logout", (req, res) => {
