@@ -116,26 +116,23 @@ app.get("/events", async (req, res) => {
       const end = new Date(event.end.dateTime);
 
       const startDate = start.toLocaleDateString("it-IT");
-      const startTime = start.toLocaleTimeString("it-IT", { hour: '2-digit', minute: '2-digit' });
-      const endDate = end.toLocaleDateString("it-IT");
-      const endTime = end.toLocaleTimeString("it-IT", { hour: '2-digit', minute: '2-digit' });
+      const startTime = start.toLocaleTimeString("it-IT", { hour:'2-digit', minute:'2-digit' });
+      const endTime = end.toLocaleTimeString("it-IT", { hour:'2-digit', minute:'2-digit' });
 
-      // Se inizio e fine sono lo stesso giorno, mostro la data solo una volta
-      const dateDisplay = startDate === endDate ? startDate : `${startDate} → ${endDate}`;
+      // Mostra solo la data se inizio e fine nello stesso giorno
+      const dateDisplay = startDate;
 
       html += `<li>
-        <strong>${event.subject}</strong><br/>
-        📅 ${dateDisplay} 🕒 ${startTime} → ${endTime}<br/>
-        📝 Note/Commenti: <em>${event.bodyPreview || "nessuna nota"}</em>
+        📅 ${dateDisplay} 🕒 ${startTime} → ${endTime} - <strong>${event.subject}</strong><br/>
+        📝 Nota: ${event.note || "<em>nessuna nota</em>"}<br/>
       </li>`;
     });
 
     html += "</ul><a href='/'>🔙 Torna indietro</a>";
-
     res.send(html);
 
   } catch (err) {
-    console.error("❌ Errore recupero eventi:", err);
+    console.error("Errore recupero eventi:", err);
     res.status(500).send("Errore recupero eventi");
   }
 });
