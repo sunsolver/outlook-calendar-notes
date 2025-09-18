@@ -104,12 +104,15 @@ app.get("/events", async (req, res) => {
   if (!req.session.accessToken) return res.redirect("/login");
 
   try {
-    const graphResponse = await fetch("https://graph.microsoft.com/v1.0/me/events", {
+    const graphResponse = await fetch("https://graph.microsoft.com/v1.0/me/events?$orderby=start/dateTime asc", {
       headers: { Authorization: `Bearer ${req.session.accessToken}` },
     });
     const data = await graphResponse.json();
 
     let html = "<h1>Eventi calendario</h1><ul style='list-style-type:circle;'>";
+
+    // In alternativa, se vuoi ordinare lato server in JS:
+    // data.value.sort((a, b) => new Date(a.start.dateTime) - new Date(b.start.dateTime));
 
     data.value.forEach(event => {
       const start = new Date(event.start.dateTime);
@@ -119,12 +122,9 @@ app.get("/events", async (req, res) => {
       const startTime = start.toLocaleTimeString("it-IT", { hour:'2-digit', minute:'2-digit' });
       const endTime = end.toLocaleTimeString("it-IT", { hour:'2-digit', minute:'2-digit' });
 
-      // Mostra solo la data se inizio e fine nello stesso giorno
-      const dateDisplay = startDate;
-
       html += `<li>
-        📅 ${dateDisplay} 🕒 ${startTime} → ${endTime} - <strong>${event.subject}</strong><br/>
-        📝 Nota: ${event.note || "<em>nessuna nota</em>"}<br/>
+        📅 ${startDate} 🕒 ${startTime} → ${endTime} - <strong>${event.subject}</strong><br/>
+        📝 Nota: ${event.note || "<em>nessuna nota</em>"}
       </li>`;
     });
 
