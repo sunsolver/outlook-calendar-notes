@@ -75,7 +75,7 @@ app.get("/login", (req, res) => {
 });
 
 // CALLBACK
-app.get("/callback", (req, res) => {
+app.get("/auth/callback", (req, res) => {
   console.log("🚦 Callback GET ricevuta");
   const tokenRequest = {
     code: req.query.code,
